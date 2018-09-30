@@ -40,6 +40,8 @@ ret, frame = cap.read(0)
 
 注意，若第一句只运行一次，采集到的视频延迟很高。
 
+![image collection](/shot/IMG_0298.JPG)
+
 ## 根据初始图像生成路径
 ### 透视变换
 [OpenCV: Geometric Image Transformations - warpPerspective()](https://docs.opencv.org/3.4.3/da/d54/group__imgproc__transform.html#gaf73673a7e8e18ec6963e3774e6a94b87)
@@ -47,6 +49,12 @@ ret, frame = cap.read(0)
 perspective = np.array(((0,0),(0,210),(297,210),(297,0)), dtype=np.float32)
 image = cv.warpPerspective(image, cv.getPerspectiveTransform(positions, perspective), (291,210))
 ```
+
+下面是（手动选点后）透视变换的展示：
+
+![before transform](/shot/Figure_1.png)
+![after transform](/shot/Figure_2.png)
+
 ### 细化黑线
 #### 二值化
 ```python
@@ -68,5 +76,9 @@ OpenCV没有提供现成函数，方法请参考[c++opencv中线条细化算法]
 对上一步得到的线段用几何算法进一步处理：
 1. 合并重合线段，连接断线
 2. 将线段连成折线（忽略孤立线段）
+
+![paths](/shot/Figure_3.png)
+
+上图中从左至右第三幅是霍夫变换的结果，图中同时出现了重合线段、断线、孤立线段三种情况，这在下一步中被一一排除。
 
 ## 接下来是什么？
