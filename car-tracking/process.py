@@ -1,76 +1,112 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Oct  1 16:54:31 2018
+
+@author: Ruijie Ni
+"""
+
+# %% The imports
+
 import cv2 as cv
 import numpy as np
 import matplotlib.pyplot as plt
+import os
+import time
 
-def refine(image):
-    # -1: must be 0; 1: must be 255; 0: either
-    meta = [np.array([[1,1,1],[-1,0,0],[0,-1,0]]),
-            np.array([[1,1,1],[0,0,0],[0,-1,-1]])]
-    templates = []
-    for t in meta:
-        for i in range(4):
-            templates.append(np.rot90(t, i))
-            templates.append(np.rot90(t[:,::-1], i))
-    templates = np.stack(templates, axis=2)
-    h, w = image.shape
-    count = 0
-    for i in range(1, h-1):
-        for j in range(1, w-1):
-            if image[i][j] == 255: continue
-            roi = image[i-1:i+2, j-1:j+2].astype(np.int32)
-            if np.sum(roi, axis=(0,1)) == 0: continue
-            if np.min(np.sum((roi-1).reshape((3,3,-1)) * templates < 0, axis=(0,1))) == 0:
-                image[i][j] = 255
-                count += 1
-    print(count)
-    # https://www.cnblogs.com/mikewolf2002/p/3327183.html
+import extract
+import localization
+import ultility
 
 
-plt.ion()
-address = 'http://admin:9092@10.87.187.225:8081/video'
-cap = cv.VideoCapture(address)
-print(cap.isOpened())
+# %% The constants
 
-for t in range(200):
-    cap = cv.VideoCapture(address)
-    success, frame = cap.read(0)
-    edges = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-    #edges = cv.GaussianBlur(edges, (7,7), 1.5, 1.5)
-    #edges = cv.Canny(edges, 0, 30, 3)
-    _, edges = cv.threshold(edges, 100, 255, cv.THRESH_BINARY)
+# about image collection
+address = 'http://admin:9092@10.53.36.113:8081/video'
+load_from_image = True
+manual_transform = False
+interval = 0.03
+
+# sizes after transformation
+width = 297
+height = 210
+scale = 2
+width = int(width*scale)
+height = int(height*scale)
+perspective = np.array(((0,0), (0,height), (width,height), (width,0)),
+                       dtype=np.float32)
+
+
+# %% Functions for initialization
+
+def init():
+    if load_from_image:
+        image = cv.imread('./board-images/image78.jpg')
+    else:
+        cap = cv.VideoCapture(address)
+        if cap.isOpened():
+            print('Connected to the IP camera sccessfully.')
+        else:
+            print('IP camera not available. Please check the settings.')
+            os._exit(0)
+           
+        _, image = cap.read(0)
     
-    while True:
-        refine(edges)
+    plt.ion()
+    fig = plt.figure()
+    print('Original image:')
+    ultility.show(image)
+    plt.show()
+    positions = []
+    
+    if manual_transform:
+        def on_click(e):
+            if len(positions) == 4: return
+            if e.button == 1:
+                positions.append((e.xdata, e.ydata))
+                plt.scatter(e.xdata, e.ydata)
+            plt.gca().figure.canvas.draw()
+            
+        fig.canvas.mpl_connect('button_press_event', on_click)
+        while len(positions) < 4:
+            plt.pause(interval)
+    else:
+        localization.init()
+        tic = time.time()
+        positions = localization.predict(image, debug=True)
+        toc = time.time()
+        print('Use time: {}'.format(toc-tic))
+    
+    positions = np.float32(np.array(positions))
+    image = cv.warpPerspective(
+        image,
+        cv.getPerspectiveTransform(positions, perspective),
+        (width, height)
+    )
+    
+    vertices = extract.extract(image, debug=True)
+    
+    print('path:', vertices)
+    ultility.show(image)
+    ultility.plot(vertices, width, height)
+    plt.show()
+    
+    return vertices
+
+
+# %% The main process
+        
+def main():
+    vertices = init()
+    for t in range(0):
+        cap = cv.VideoCapture(address)
+        success, frame = cap.read(0)
+        edges = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        
         plt.cla()
-        plt.imshow(np.concatenate((frame[:,:,::-1], np.stack((edges,)*3, axis=2)), axis=1))
-        plt.pause(0.003)
+        plt.imshow(frame, edges)
+        plt.pause(interval)
 
 
-#def onMouse(e, x, y):
-#    if e == cv.CV_EVENT_LBUTTONDOWN:
-#        positions.append((x, y))
-#        cv.circle(frame, cv.Point(x, y), 2, cv.Scalar(0, 0, 255), -1, cv.AA)
-#
-
-#        
-#frame = cap.read()
-#cv.imshow("capture", frame)
-#cv.setMouseCallback("frame", onMouse)
-#while len(positions) < 4:
-#    pass
-#cv.warpPerspective(frame, frame, positions)
-#cv.imshow("capture", frame)
-#cv.waitKey()
-#cv.cvtColor(frame, frame, cv.CV_BGR2GRAY)
-#cv.imshow("capture", frame)
-#cv.waitKey()
-#cv.threshold(frame, frame, 200, 255, cv.CV_THRESH_BINARY)
-#cv.imshow("capture", frame)
-#cv.waitKey()
-#refine(frame)
-#
-#while True:
-#    frame = cap.read()
-#    cv.imshow("capture", frame)
-#    if cv.waitKey(30) >= 0:
-#        break
+if __name__ == '__main__':
+    main()
