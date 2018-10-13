@@ -61,6 +61,11 @@ ret, frame = cap.read(0)
 
 ![predict](/shot/Figure_4.png)
 
+### 精定位
+预测到的角点仍有偏差，此时在每个角点的领域内使用 OpenCV 的`goodFeaturesToTrack()`函数，将误差控制在像素以内。在此之前，使用中值滤波`medianBlur()`，排除角点周围的灰尘的干扰。结果如下：
+
+![corner](/shot/Figure_5.png)
+
 ## 根据初始图像生成路径
 ### 透视变换
 [OpenCV: Geometric Image Transformations - warpPerspective()](https://docs.opencv.org/3.4.3/da/d54/group__imgproc__transform.html#gaf73673a7e8e18ec6963e3774e6a94b87)
