@@ -1,0 +1,6 @@
+car-tracking/process.py		目前进度的主程序，采集图像并调用其他各模块。下一步将作为子程序，返回路径和小车的相对位置。
+car-tracking/localization.py	对纸板的四角进行定位，包括粗定位和精定位。直接运行时训练模型，被调用 init(), predict() 时预测纸板位置。
+car-tracking/annotation.py	手动标注纸板的四角，作为 localization.py 的训练图像，同时作数据增强。下一步可能继续用来标注小车。
+car-tracking/extract.py		调用 extract() 时按照以下顺序提取并返回纸板上黑线的路径（用列表表示）：细化黑线（二值化->膨胀->细化（已删））->检测直线->生成路径。
+car-tracking/geometry.py	包括一个点类 Point 和基本的几何运算函数，作为 extract.py 的函数库使用。
+car-tracking/ultility.py	包括一些基于 Matplotlib 的常用的显示函数与绘制函数。
