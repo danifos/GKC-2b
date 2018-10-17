@@ -80,6 +80,8 @@ image = cv.warpPerspective(image, cv.getPerspectiveTransform(positions, perspect
 ![after transform](/shot/Figure_2.png)
 
 ### 细化黑线
+#### 聚类分析
+为了使下一步的二值化对光线具有稳定性，类似于有损图像压缩，使用 $k$-means 聚类算法，找出纸板上黑色和白色两类颜色，并将两个聚类中心的中点作为二值化的阈值。实际上，聚类已经实现了二值化，而且允许纸板上的颜色不是黑白两色。
 #### 二值化
 ```python
 image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)

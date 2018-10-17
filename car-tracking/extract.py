@@ -28,7 +28,7 @@ for t in meta:
 templates = np.stack(templates, axis=2)
 
 # s: When applying dialation, the size is (s*2+1, s*2+1), the kernel is (s, s).
-s = 1
+s = 2
 
 # distance that 2 lines closed enough to be recognized as a single one
 delta_e = 10
@@ -38,6 +38,35 @@ delta_v = 30
 
 
 # %% Ultility functions
+
+def k_means_clustering(image):
+    """
+    Find 2 clusters of the colors of the image,
+    and then return a boundary for the 2 clusters.
+    
+    Inputs:
+    - image: An grayscale image.
+    
+    Returns:
+    - threshold: The boundary that split the 2 clusters.
+    """
+    prev = np.zeros(2)
+    centeroids = np.array([0., 255.])
+    X = np.reshape(image, -1)
+    sum_t = np.sum(X)
+    while np.any(prev != centeroids):
+        d = np.abs(X.reshape((1,-1)) - centeroids.reshape((-1,1)))
+        indices = (d[0] != np.min(d, axis=0))
+        num_clusters = np.sum(indices == np.array([[0],[1]]), axis=1)
+        sum_1 = np.sum(X[indices])
+        sum_clusters = np.array([sum_t-sum_1, sum_1])
+        prev = centeroids.copy()
+        centeroids = sum_clusters / num_clusters
+    threshold = np.mean(centeroids)
+    print('Clusters:', centeroids)
+    print('Threshold:', threshold)
+    return threshold
+
 
 def refine(image):
     """
@@ -220,7 +249,8 @@ def extract(frame, debug=False):
     # put the image from BGR to gray
     edges = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
     # transform into binary image
-    _, edges = cv.threshold(edges, 100, 255, cv.THRESH_BINARY)
+    threshold = k_means_clustering(edges)
+    _, edges = cv.threshold(edges, threshold, 255, cv.THRESH_BINARY)
     
     # make the image thinner a little bit
     edges = cv.dilate(edges, cv.getStructuringElement(cv.MORPH_CROSS, (s*2+1,)*2, (s,)*2))
