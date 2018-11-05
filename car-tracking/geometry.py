@@ -4,8 +4,11 @@
 epsilon = 1e-8
 
 class Point:
-    def __init__(self, x, y):
-        self.x, self.y = x, y
+    def __init__(self, x, y=None):
+        if y:
+            self.x, self.y = x, y
+        else:
+            self.x, self.y = x
 
     def to_tuple(self):
         return (self.x, self.y)
