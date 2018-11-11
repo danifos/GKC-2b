@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pickle
 import os
+from ultility import gamma_correction
 
 
 # %% The constanst
@@ -36,11 +37,6 @@ file_name = 'image'
 
 
 # %% Data augmentation
-
-def gamma_correction(image, gamma):
-    result = 256 * np.power(image/256, gamma)
-    return result
-
 
 def transformation(image, prepers, offsets):
     prepers = np.float32(prepers)
