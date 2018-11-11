@@ -41,7 +41,7 @@ perspective = np.array(((0,0), (0,height), (width,height), (width,0)),
 
 def init():
     if load_from_image:
-        image = cv.imread('./board-images/image78.jpg')
+        image = cv.imread('./board-images/image11-8.jpg')
     else:
         cap = cv.VideoCapture(address)
         if cap.isOpened():
@@ -110,3 +110,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+    
+    
