@@ -43,23 +43,34 @@ import ultility
 # %% Basic settings
 
 # changed
-logdir = 'result-300'
+logdir = 'result-500'
 batch_size = 32
-learning_rate = 1e-5
+learning_rate = 1e-4
+weight_decay = 5e-4
 num_epochs = 300
-decay_epochs = []
-num_train = 760
-num_total = 810
+decay_epochs = [250, 350]
+num_train = 1900
+num_total = 1990
 
 # unchanged
 ttype = torch.cuda.FloatTensor # use GPU
 dtype = torch.float32
 device = torch.device('cuda')   
-data_dir = './board-images'
+data_dir = './board-images-new'
 anna_name = 'annotations'
 input_size = 224
-width = 480
-height = 270
+width = 640
+height = 480
+
+def parameterize(coords, w, h):
+    base_anchor = np.array(((w,h), (w,7*h), (7*w,7*h), (7*w,h))) / 8
+    base_size = np.array((w, h)) * 3 / 4
+    return (coords - base_anchor) / base_size
+
+def inv_parameterize(t, w, h):
+    base_anchor = np.array(((w,h), (w,7*h), (7*w,7*h), (7*w,h))) / 8
+    base_size = np.array((w, h)) * 3 / 4
+    return t * base_size + base_anchor
 
 
 # %% Define the Dataset
@@ -75,10 +86,10 @@ class BoardLocalization(Dataset):
                 self.coords.append(anna['coords'])
         self.imgs = torch.stack(self.imgs, dim=0)
         
-#        self.coords = np.array(self.coords).reshape((-1,4,2))
-#        self.coords /= np.array((((width,height))))
-#        self.coords = self.coords.reshape((-1,8))
-        self.coords = torch.from_numpy(np.array(self.coords))
+        self.coords = np.array(self.coords).reshape((-1,4,2))
+        self.coords = parameterize(self.coords, width, height)
+        self.coords = self.coords.reshape((-1,8))
+        self.coords = torch.from_numpy(self.coords)
         
     def __getitem__(self, idx):
         return (self.imgs[idx], self.coords[idx])
@@ -107,6 +118,18 @@ if __name__ == '__main__':
 
 # %% Utility functions
 
+def smooth_L1(x, dim=0):
+    """
+    Inputs:
+        - x: Tensor of size 4xN (by default) or size Nx4 (when dim=1)
+    Returns:
+        - loss: Tensor of size N
+    """
+    mask = (torch.abs(x) < 1).float()
+    loss = torch.sum(mask*0.5*torch.pow(x, 2) + (1-mask)*(torch.abs(x)-0.5), dim)
+    return loss
+
+
 def check_acc(model, loader, total_batches=0):
     """Check accuracy for a specific Dataset by its DataLoader."""
     num_samples = num_correct = num_batches = 0
@@ -117,7 +140,7 @@ def check_acc(model, loader, total_batches=0):
             y = y.to(device=device, dtype=dtype)
             scores = model(x)
             
-            num_correct += torch.sum(torch.abs(scores - y) <= 5)
+            num_correct += torch.sum(torch.abs(scores - y) <= 0.02)
             num_samples += scores.shape[0] * scores.shape[1]
             
             num_batches += 1
@@ -141,7 +164,9 @@ def predict(image, debug=False):
     with torch.no_grad():
         x = x.to(device=device, dtype=dtype)  # move to device, e.g. GPU
         scores = model(x)
-        positions = np.reshape(np.int16(scores.cpu().numpy()), (4,2))
+        positions = np.reshape(scores.cpu().numpy(), (4,2))
+        positions = inv_parameterize(positions, w, h)
+        positions = positions.astype(np.int16)
         if debug:
             print('corners detected:')
             print(positions)
@@ -179,7 +204,7 @@ def predict(image, debug=False):
             plt.scatter(corner_pos[:,0], corner_pos[:,1])
             plt.show()
             
-        return positions#*np.array((w,h))
+        return positions
 
 
 # %% Initializing with pretrained ResNet-18
@@ -196,7 +221,7 @@ def init():
     for cur, _, files in os.walk('./'):  # check if we have the logdir already
         if cur == './{}'.format(logdir):  # we've found it
             # load basic resnet18
-            model = torchvision.models.resnet18(pretrained=False, num_classes=8)
+            model = torchvision.models.alexnet(pretrained=False, num_classes=8)
             
             # find the latest checkpoint file (.pkl)
             prefix, suffix = 'fine-tune-', '.pkl'
@@ -227,10 +252,15 @@ def init():
     else:  # there's not
         os.mkdir(logdir)
         # load pretrained resnet18
-        model = torchvision.models.resnet18(pretrained=True)
+        model = torchvision.models.alexnet(pretrained=True)
         # change the number of classes
-        model.fc = torch.nn.Linear(model.fc.in_features, 8)
-        nn.init.kaiming_normal_(model.fc.weight)
+        children = [child for child in model.classifier.children()][:-1]
+        fc = torch.nn.Linear(4096, 8)
+        children.append(fc)
+        model.classifier = torch.nn.Sequential(*children)
+        nn.init.kaiming_normal_(fc.weight)
+        #model.fc = torch.nn.Linear(model.fc.in_features, 8)
+        #nn.init.kaiming_normal_(model.fc.weight)
         
         loss_summary = []
         acc_summary = []
@@ -271,8 +301,9 @@ def train(optimizer, num_epochs, print_every=100):
             y = y.to(device=device, dtype=dtype)
             
             scores = model(x)
-            loss = torch.pow(scores - y, 2).view(-1, 4, 2)
-            loss = torch.sum(torch.sqrt(torch.sum(loss, 2))) / x.shape[0]
+            loss = smooth_L1(scores - y)
+            #loss = torch.pow(scores - y, 2).view(-1, 4, 2)
+            loss = torch.sum(loss) / x.shape[0]
             
             optimizer.zero_grad()
             
@@ -404,7 +435,9 @@ def main():
         
         params = [{'params': m.parameters()} for m in model.children()]
         params[-1]['lr'] = learning_rate * 10
-        if train(optim.SGD(params, lr=learning_rate, momentum=0.9), num_epochs=num_epochs):
+        if train(optim.SGD(params, lr=learning_rate,
+                           momentum=0.9, weight_decay=weight_decay),
+                num_epochs=num_epochs):
             break
     
     #plot()

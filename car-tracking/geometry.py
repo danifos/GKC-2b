@@ -5,7 +5,7 @@ epsilon = 1e-8
 
 class Point:
     def __init__(self, x, y=None):
-        if y:
+        if y is not None:
             self.x, self.y = x, y
         else:
             self.x, self.y = x
@@ -15,6 +15,11 @@ class Point:
     
     def to_list(self):
         return [self.x, self.y]
+    
+    def __getitem__(self, idx):
+        if idx == 0:
+            return self.x
+        return self.y
         
     def __eq__(self, p):
         if self.x == p.x and self.y == p.y:

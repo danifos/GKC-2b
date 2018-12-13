@@ -19,19 +19,19 @@ from ultility import gamma_correction
 # %% The constanst
 
 # about sampling
-videos = ['IMG_01{}.MOV'.format(i) for i in range(53, 61)]
+videos = ['IMG_0{}.JPG'.format(i) for i in range(700, 901)]
 sample_rate = 30
 interval = 0.03
 num_aug = 9
 
 # image size
-width = 480
-height = 270
+width = 640
+height = 480
 center = np.array([[width, height]])/2
 
 # storage
-video_dir = './train-videos'
-data_dir = './board-images'
+video_dir = './train-images'
+data_dir = './board-images-new'
 anna_name = 'annotations'
 file_name = 'image'
 
@@ -51,11 +51,14 @@ def transformation(image, prepers, offsets):
 
 def data_augmentation(image, anna, new_annas):
     for i in range(num_aug):
-        result = gamma_correction(image, np.exp(np.random.normal(scale=.5)))
+        result = gamma_correction(image, np.exp(np.random.normal(scale=.1)))
         
         prepers = np.reshape(anna['coords'], (4,2))
-        offsets = np.random.uniform(high=np.sign(prepers - center)*20)
+        offsets = np.random.uniform(high=np.sign(prepers - center)*4)
         result = transformation(result, prepers, offsets)
+        result = result.astype(np.int32) \
+               + np.random.normal(0, 5, (height, width, 3)).astype(np.int32)
+        result = result.clip(0, 255).astype(np.uint8)
         
         file_dir = '{}-{}.jpg'.format(anna['file_name'].rstrip('.jpg'), i)
         cv.imwrite(os.path.join(data_dir, file_dir), result)
@@ -95,24 +98,26 @@ def click_on(fig):
 
 
 def annotate(address, annotations, fig):
-    cap = cv.VideoCapture(address)
-    if not cap.isOpened():
-        print('Failed')
-        return
+#    cap = cv.VideoCapture(address)
+#    if not cap.isOpened():
+#        print('Failed')
+#        return
     
     while True:
-        for i in range(sample_rate):
-            ret, image = cap.read()
-            if not ret:
-                print('End')
-                return
-        
+#        for i in range(sample_rate):
+#            ret, image = cap.read()
+#            if not ret:
+#                print('End')
+#                return
+        image = cv.imread(address)
+        if image.shape[0] > image.shape[1]:
+            image = np.rot90(image)
         image = cv.resize(image, (width, height))
         plt.imshow(image[:,:,::-1])
         
         positions = click_on(fig)
         if not positions:
-            continue
+            break
             
         file_dir = '{}{}.jpg'.format(file_name, len(annotations)//(num_aug+1))
         cv.imwrite(os.path.join(data_dir, file_dir), image)
@@ -120,6 +125,7 @@ def annotate(address, annotations, fig):
                             'coords' : np.reshape(np.array(positions), -1)})
         
         data_augmentation(image, annotations[-1], annotations)
+        break
 
 
 # %% Main process
