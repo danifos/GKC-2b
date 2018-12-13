@@ -12,144 +12,111 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import cv2 as cv
-import types
 
-import geometry as gm
 import ultility
-#from ultility import gamma_correction, channel_threshold, color_threshold
-
-
-# %% consts
-
-detector_type = 'SIFT'  # 'SIFT' or 'SURF'
-tmp_src = 'templates/car.jpg'  # template image
-num_samples = 32
-# Only use and tweak these in emergency
-#scale = 8
-#tmp_gamma = 1.5
-#frame_gamma = 0.7
 
 
 # %% Use detection to track
 
 class Descriptor:
-    def __init__(self, image, detector):
+    def __init__(self, correction):
+        self.correction = correction
+        self.success = False
+        
+    def __call__(self, image):
         self.org = image.copy()
         
         # Apply a same operation to get a recognizable feature
+        # we've got 10 parameters here
         self.img = image
-        #self.img = color_threshold(self.img, (0, 0, 255), 250)
         self.img = cv.cvtColor(self.img, cv.COLOR_BGR2HSV)
-        #self.img = channel_threshold(self.img, 195, 60, dim=0)
+        self.img = ((self.img[...,1:2] > 40) & (self.img[...,2:3] > 100)) \
+                 * self.img
+        self.front = (np.abs(self.img[...,0:1]-120) < 10) * self.img
+        self.back = ((np.abs(self.img[...,0:1]-160) < 20) \
+                   | (np.abs(self.img[...,0:1]-0) < 10)) * self.img
+        self.back = self.refine(self.back, 2, 7)
+        self.feat = cv.cvtColor(self.front + self.back, cv.COLOR_HSV2BGR)
         
-        self.kp, self.des = detector.detectAndCompute(self.img, None)
+        # Get 2 points from the image
+        try:
+            self.front_point = self.center_of_blob(self.front)
+            self.back_point = self.center_of_blob(self.back)
+            self.success = True
+        except:
+            self.success = False
+            return None
+        
+        # Apply a correction of rotation
+        dist = np.linalg.norm(self.back_point-self.front_point)
+        ang = np.arctan2(self.back_point[1]-self.front_point[1],
+                         self.back_point[0]-self.front_point[0]) \
+            + self.correction
+        self.back_point = self.front_point \
+                        + dist * np.array((np.cos(ang), np.sin(ang)))
+        
+        return self.back_point, (ang+np.pi) % (np.pi*2)
+        
     def show(self, item=None):
         ultility.show(self.org)
-        if item:
-            points = np.array(tuple(p.pt for p in self[item]))
-            plt.scatter(points[:,0], points[:,1])
-        else:
-            points = np.array(tuple(p.pt for p in self.kp))
-            plt.scatter(points[:,0], points[:,1])
-    def __getitem__(self, item):
-        if isinstance(item, slice):
-            return self.kp[item]
-        if hasattr(item, '__getitem__') or isinstance(item, types.GeneratorType):
-            return (self.kp[idx] for idx in item)
-        return self.kp[item]
+        if self.success:
+            plt.gca().add_patch(patches.Arrow(
+                *self.back_point, *(self.front_point-self.back_point),
+                width=25, color='w'))
+        
+    def refine(self, img, s1, s2):
+        img = cv.morphologyEx(img, cv.MORPH_OPEN,
+            cv.getStructuringElement(cv.MORPH_CROSS, (s1*2+1,)*2, (s1,)*2))
+        img = cv.dilate(img,
+            cv.getStructuringElement(cv.MORPH_CROSS, (s2*2+1,)*2, (s2,)*2))
+        return img
+    
+    def center_of_blob(self, img):
+        _, img = cv.threshold(
+            cv.cvtColor(cv.cvtColor(img, cv.COLOR_HSV2BGR), cv.COLOR_BGR2GRAY),
+            1, 255, cv.THRESH_BINARY
+        )
+        M = cv.moments(img)
+        x = int(M['m10'] / M['m00'])
+        y = int(M['m01'] / M['m00'])
+        return np.array((x, y))
 
 
-def track(img, debug=None):
+def track(img, debug=False):
     """
     Inputs:
         - img: an image to be tracked
-        - debug: the subplot to draw mask if you want to debug
+        - debug: to debug or not
     Returns a dict of:
-        - center: tuple (x, y), the center point of the car
+        - center: numpy array (x, y), the center point of the car
         - angle: direction of the car, in rad
     """
-    image = Descriptor(img, detector)
-    
-    h, w, _ = template.img.shape
-    
-    bf = cv.BFMatcher()
-    matches = bf.match(image.des, template.des)
-    matches.sort(key=lambda x:x.distance)
-    
-    best_matches = matches[:num_samples]
-    
-    homography = cv.findHomography(np.array([template[m.trainIdx].pt for m in best_matches]),
-                                   np.array([image[m.queryIdx].pt for m in best_matches]),
-                                   cv.RANSAC, 3)[0]
-    
-    results = cv.perspectiveTransform(
-            np.array([[template[m.trainIdx].pt for m in best_matches]]),
-            homography)[0]
-    
-    cpoints = cv.perspectiveTransform(np.array([[(0,0), (w,h), (0,h), (w,0)]],
-                                               dtype='float32'), homography)[0]
-    
-    corners = [gm.Point(c) for c in cpoints]
-    center = gm.get_intersection(gm.determine_linear_equation(*corners[:2]),
-                                 gm.determine_linear_equation(*corners[2:]))
-    w = corners[0]-corners[3]
-    baseline = gm.determine_linear_equation(*corners[::3])
-    h = gm.get_distance(baseline, center)*2
-    dirline = gm.get_perpendicular_line(baseline, center)
-    a = np.arctan2(dirline[0], -dirline[1])
-    
-    if debug:
-        image.show(m.queryIdx for m in best_matches)
-        
-        plt.scatter(cpoints[:,0], cpoints[:,1])
-        plt.plot(cpoints[:2,0], cpoints[:2,1], 'k-')
-        plt.plot(cpoints[2:,0], cpoints[2:,1], 'k-')
-        
-        plt.scatter(results[:,0], results[:,1], color='y', alpha=0.5)
-        
-        debug.add_patch(patches.Rectangle(
-            corners[3].to_tuple(),
-            h, w, a*180/np.pi,
-            color='w', alpha=0.3
-        ))
-        
-        plt.xlim(0, img.shape[1])
-        plt.ylim(img.shape[0], 0)
-    
-    return {'center' : center.to_tuple(), 'angle' : a}
+    ret = detector(img)
+    if debug: detector.show()
+    return ret
 
 
 def init():
-    global detector, template
-    if detector_type == 'SIFT':
-        detector = cv.xfeatures2d.SIFT_create()
-    elif detector_type == 'SURF':
-        detector = cv.xfeatures2d.SURF_create()
-    
-    template = Descriptor(cv.imread(tmp_src), detector)
-    #ultility.show(cv.cvtColor(template.img, cv.COLOR_HSV2BGR))
+    global detector
+    detector = Descriptor(0.15)
     
 
 # %% Main: a test program
 
 def main():
-    global ax
-    ax = plt.figure().add_subplot(111)
-#    tmp = cv.imread('IMG_0590.JPG')
-#    tmp = cv.resize(tmp, (tmp.shape[1]//4, tmp.shape[0]//4))
-#    track(tmp)
-#    return
-    cap = cv.VideoCapture('VID_1.mp4')
+    #cap = cv.VideoCapture('VID_4.mp4')
+    address = 'http://admin:9092@10.64.15.42:8081/video'
     while True:
+        cap = cv.VideoCapture(address)
         success, frame = cap.read(0)
         if not success:
             break
-        # frame = gamma_correction(frame, frame_gamma)  # not to use it as possible (slow)
         # resize is only used in demo (the video is in a high resolution)
-        frame = cv.resize(frame, (frame.shape[1]//2, frame.shape[0]//2))
+        #frame = cv.resize(frame, (frame.shape[1]//2, frame.shape[0]//2))
         
         plt.cla()
-        track(frame, ax)
+        #ultility.show(frame)
+        track(frame, True)
         plt.pause(0.03)
 
 
