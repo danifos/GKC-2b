@@ -18,6 +18,7 @@ import extract
 import localization
 import ultility
 import track
+import match
 
 
 # %% The constants
@@ -29,7 +30,7 @@ lan = '10.192.217.220:8081'
 address = None
 load_from_video = False
 manual_transform = True
-fix_camera = True
+fix_camera = False
 interval = 0.03
 
 # sizes after transformation
@@ -38,15 +39,15 @@ height = 210
 scale = 2
 width = int(width*scale)
 height = int(height*scale)
+size = np.array((width, height))
 positions = None
 perspective = np.array(((0,0), (0,height), (width,height), (width,0)),
                        dtype=np.float32)
+shift = 100  # show a larger perspective than the board
 
-def warp_perspective(image):
+def warp_perspective(image, position, perspective, size):
     image = cv.warpPerspective(
-        image,
-        cv.getPerspectiveTransform(positions, perspective),
-        (width, height)
+        image, cv.getPerspectiveTransform(positions, perspective), tuple(size)
     )
     return image
 
@@ -106,17 +107,20 @@ def init(debug=False):
         print('Use time: {}'.format(toc-tic))
     
     positions = np.float32(np.array(positions))
-    image = warp_perspective(image)
+    img = warp_perspective(image, positions, perspective, size)
+    plt.cla()
+    ultility.show(img)
     
-    vertices = extract.extract(image, debug=debug)
+    vertices = extract.extract(img, debug=debug)
     
     if debug:
         print('path:', vertices)
-        ultility.show(image)
+        ultility.show(img)
         ultility.plot(vertices, width, height)
         plt.show()
     
     track.init()
+    match.init(image, positions)
     
     return vertices
 
@@ -124,16 +128,15 @@ def init(debug=False):
 # %% Read the current image and return the position of the car
     
 def read(debug=False):
-    global cap
+    global cap, positions
     if not load_from_video:
         cap = cv.VideoCapture(address)
     success, frame = cap.read(0)
     if not success: return -1
     
-    if fix_camera:
-        img = warp_perspective(frame)
-    else:  # TODO (maybe use SIFT to detect, or directly use CNN)
-        pass
+    if not fix_camera:
+        positions = match.match(frame)
+    img = warp_perspective(frame, positions, perspective+shift, size+2*shift)
     
     plt.cla()
     coords = track.track(img, debug=debug)
@@ -146,9 +149,10 @@ def read(debug=False):
 # %% Test
         
 def main():
-    global load_from_video, manual_transform
+    global load_from_video, manual_transform, fix_camera
     load_from_video = True
     manual_transform = True
+    fix_camera = False
     
     path = init(debug=False)
     while True:
@@ -156,7 +160,8 @@ def main():
         ret = read(debug=True)
         if ret == -1:
             break
-        plt.plot([p[0] for p in path], [p[1] for p in path])
+        plt.plot([p[0]+shift for p in path],
+                 [p[1]+shift for p in path])
         plt.pause(interval)
 
 

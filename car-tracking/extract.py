@@ -63,9 +63,13 @@ def k_means_clustering(image):
         prev = centeroids.copy()
         centeroids = sum_clusters / num_clusters
     threshold = np.mean(centeroids)
-    print('Clusters:', centeroids)
-    print('Threshold:', threshold)
-    return threshold
+    d = np.abs(X.reshape((1,-1)) - centeroids.reshape((-1,1)))
+    clusters = (np.argmin(d, axis=0) == 1)
+    return {'threshold': threshold,
+            'center_min': centeroids[0],
+            'center_max': centeroids[1],
+            'max_min': np.max(X[clusters == 0]),
+            'min_max': np.min(X[clusters == 1])}
 
 
 def refine(image):
@@ -249,14 +253,13 @@ def extract(frame, debug=False):
     # put the image from BGR to gray
     edges = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
     # transform into binary image
-    threshold = k_means_clustering(edges)
+    threshold = k_means_clustering(edges)['threshold']
     _, edges = cv.threshold(edges, threshold, 255, cv.THRESH_BINARY)
     
     # make the image thinner a little bit
     edges = cv.dilate(edges, cv.getStructuringElement(cv.MORPH_CROSS, (s*2+1,)*2, (s,)*2))
     
     # make the image as thin as possible (until refine(edges) returns 0)
-    # 注意，细化函数refine仍存在问题，有时会直接导致某线段直接消失，目前删去反而更好
     #while refine(edges): pass
 
     # detect lines roughly with Hough transformation

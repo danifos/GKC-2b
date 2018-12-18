@@ -43,9 +43,9 @@ import ultility
 # %% Basic settings
 
 # changed
-logdir = 'result-500'
+logdir = 'model'
 batch_size = 32
-learning_rate = 1e-4
+learning_rate = 5e-5
 weight_decay = 5e-4
 num_epochs = 300
 decay_epochs = [250, 350]
@@ -188,9 +188,9 @@ def predict(image, debug=False):
                           max(positions[i,0]-s, 0) : min(positions[i,0]+s, w)]
                 )
                 corner_pos.append(corner[0].reshape(-1))
-                if corner is not None:
-                    print(corner-s)
-                    positions[i] += np.int16(corner[0]).reshape(-1) - s
+            if corner is not None:
+                print(corner-s)
+                positions[i] += np.int16(corner[0]).reshape(-1) - s
         
         if debug:
             fig = plt.Figure()
@@ -425,6 +425,19 @@ def weighted_linear_regression(summary, tau):
             smooth[i].append(float(theta[0]+x[i]*theta[1]))
     
     return smooth
+
+
+# %% Test
+    
+def test():
+    src = ['board-images-new/image{}.jpg'.format(i) for i in range(200)]
+    for img in src:
+        plt.cla()
+        image = cv.imread(img)
+        ultility.show(image)
+        positions = predict(image)
+        plt.scatter(positions[:,0], positions[:,1])
+        plt.pause(0.2)
 
 
 # %% Main (train neural net)
