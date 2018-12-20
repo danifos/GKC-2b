@@ -22,7 +22,7 @@ from ultility import gamma_correction
 videos = ['IMG_0{}.JPG'.format(i) for i in range(700, 901)]
 sample_rate = 30
 interval = 0.03
-num_aug = 9
+num_aug = 19
 
 # image size
 width = 640
@@ -51,16 +51,18 @@ def transformation(image, prepers, offsets):
 
 def data_augmentation(image, anna, new_annas):
     for i in range(num_aug):
-        result = gamma_correction(image, np.exp(np.random.normal(scale=.1)))
+        result = gamma_correction(image, np.exp(np.random.normal(scale=.3)))
         
         prepers = np.reshape(anna['coords'], (4,2))
-        offsets = np.random.uniform(high=np.sign(prepers - center)*4)
+        offsets = np.random.uniform(low=-np.sign(prepers - center)*4,
+                                    high=np.sign(prepers - center)*20)
         result = transformation(result, prepers, offsets)
         result = result.astype(np.int32) \
-               + np.random.normal(0, 5, (height, width, 3)).astype(np.int32)
+               + np.random.normal(0, 2, (height, width, 3)).astype(np.int32)
         result = result.clip(0, 255).astype(np.uint8)
         
-        file_dir = '{}-{}.jpg'.format(anna['file_name'].rstrip('.jpg'), i)
+        file_dir = '{}-{}.jpg'.format(anna['file_name'].rstrip('.jpg'),
+                                      chr(ord('a')+i))
         cv.imwrite(os.path.join(data_dir, file_dir), result)
         new_annas.append({'file_name' : file_dir,
                           'coords' : np.reshape(prepers+offsets, -1)})
@@ -145,9 +147,29 @@ def main():
     for video in videos:
         annotate(os.path.join(video_dir, video), annotations, fig)
     
-    with open(os.path.join(data_dir, anna_name), 'wb') as fi:
-        pickle.dump(annotations, fi)
+    with open(os.path.join(data_dir, anna_name), 'wb') as fo:
+        pickle.dump(annotations, fo)
+
+
+def reset():
+    annotations = None
+    with open(os.path.join(data_dir, anna_name), 'rb') as fi:
+        annotations = pickle.load(fi)
+        
+    new_annotations = []
+    for info in annotations:
+        filename = info['file_name']
+        if filename[-6] == '-' or \
+           filename == 'image121.jpg':
+            continue
+        image = cv.imread(os.path.join(data_dir, filename))
+        new_annotations.append(info)
+        data_augmentation(image, new_annotations[-1], new_annotations)
+        
+    with open(os.path.join(data_dir, anna_name), 'wb') as fo:
+        pickle.dump(new_annotations, fo)
     
     
 if __name__ == '__main__':
-    main()
+    reset()
+    #main()

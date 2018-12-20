@@ -94,11 +94,14 @@ def init(img, positions):
 # %% Main: a test program
 
 def main():
-    cap = cv.VideoCapture('demo.mp4')
+    cap = cv.VideoCapture('demo_large.mp4')
     ret, frame = cap.read(0)
-    positions = np.array([[52.576714, 69.34139], [23.18219, 432.99365],
-                          [634.5883,  426.2749], [585.03754, 56.74374]],
-                         dtype=np.float32)  
+    positions = np.array([[135.88205, 123.48814], [116.24813, 371.36624],
+                          [535.10486, 368.09393], [501.5636, 114.489265]],
+                        dtype=np.float32)
+    #positions = np.array([[52.576714, 69.34139], [23.18219, 432.99365],
+    #                      [634.5883,  426.2749], [585.03754, 56.74374]],
+    #                     dtype=np.float32)  
     width = 297
     height = 210
     scale = 2

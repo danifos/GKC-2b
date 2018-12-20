@@ -8,21 +8,29 @@ Created on Fri Oct 12 23:32:10 2018
 
 import numpy as np
 import matplotlib.pyplot as plt
+import cv2 as cv
+
 
 # %% Utility functions
 
-def show(*images):
+def show(*imgs):
+    images = []
+    height = min(image.shape[0] for image in imgs)
+    for i, image in enumerate(imgs):
+        width = int(image.shape[1]/image.shape[0]*height)
+        images.append(cv.resize(image, (width, height)))
+            
     arrays = [image[:,:,::-1] if len(image.shape) == 3 \
               else np.stack((image,)*3, axis=2) for image in images]
     plt.imshow(np.concatenate(arrays, axis=1))
 
 
-def plot(vertices, width, height):
+def plot(vertices, width=None, height=None):
     vertices = np.array(vertices)
     plt.plot(vertices[:,0], vertices[:,1])
     plt.scatter(vertices[:,0], vertices[:,1])
-    plt.xlim((0, width-1))
-    plt.ylim((height-1, 0))
+    if width is not None: plt.xlim((0, width-1))
+    if height is not None: plt.ylim((height-1, 0))
 
 
 def channel_threshold(img, saturation, threshold, dim=1):

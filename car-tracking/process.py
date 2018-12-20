@@ -25,8 +25,8 @@ import match
 
 # about image collection
 username = 'admin'
-password = '9092'
-lan = '10.192.217.220:8081'
+password = 'admin'
+lan = '10.162.76.208:8081'
 address = None
 load_from_video = False
 manual_transform = True
@@ -43,7 +43,7 @@ size = np.array((width, height))
 positions = None
 perspective = np.array(((0,0), (0,height), (width,height), (width,0)),
                        dtype=np.float32)
-shift = 100  # show a larger perspective than the board
+shift = 0  # show a larger perspective than the board
 
 def warp_perspective(image, position, perspective, size):
     image = cv.warpPerspective(
@@ -60,8 +60,12 @@ cap = None
 def init(debug=False):
     global lan, address, positions, cap
     
+    track.init()
+    if not manual_transform:
+        localization.init()
+    
     if load_from_video:
-        cap = cv.VideoCapture('demo.mp4')
+        cap = cv.VideoCapture('demo_large.mp4')
         #image = cv.imread('./board-images-new/image199.jpg')
     else:
         string = input('Please check if the LAN address ({}) is correct \
@@ -100,13 +104,13 @@ def init(debug=False):
         while len(positions) < 4:
             plt.pause(interval)
     else:
-        localization.init()
         tic = time.time()
         positions = localization.predict(image, debug=debug)
         toc = time.time()
         print('Use time: {}'.format(toc-tic))
     
     positions = np.float32(np.array(positions))
+    print(positions)
     img = warp_perspective(image, positions, perspective, size)
     plt.cla()
     ultility.show(img)
@@ -119,7 +123,6 @@ def init(debug=False):
         ultility.plot(vertices, width, height)
         plt.show()
     
-    track.init()
     match.init(image, positions)
     
     return vertices
@@ -141,7 +144,7 @@ def read(debug=False):
     plt.cla()
     coords = track.track(img, debug=debug)
     if not debug:  # show the origin image if not in debug mode
-        ultility.show(frame)
+        ultility.show(img, frame)
     
     return coords
 
@@ -151,7 +154,7 @@ def read(debug=False):
 def main():
     global load_from_video, manual_transform, fix_camera
     load_from_video = True
-    manual_transform = True
+    manual_transform = False
     fix_camera = False
     
     path = init(debug=False)
@@ -160,8 +163,7 @@ def main():
         ret = read(debug=True)
         if ret == -1:
             break
-        plt.plot([p[0]+shift for p in path],
-                 [p[1]+shift for p in path])
+        ultility.plot(np.array(path)+shift)
         plt.pause(interval)
 
 

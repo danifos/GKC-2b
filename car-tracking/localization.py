@@ -45,12 +45,12 @@ import ultility
 # changed
 logdir = 'model'
 batch_size = 32
-learning_rate = 5e-5
+learning_rate = 1e-4
 weight_decay = 5e-4
 num_epochs = 300
-decay_epochs = [250, 350]
-num_train = 1900
-num_total = 1990
+decay_epochs = []
+num_train = 3800
+num_total = 3980
 
 # unchanged
 ttype = torch.cuda.FloatTensor # use GPU
@@ -63,11 +63,13 @@ width = 640
 height = 480
 
 def parameterize(coords, w, h):
+    return coords
     base_anchor = np.array(((w,h), (w,7*h), (7*w,7*h), (7*w,h))) / 8
     base_size = np.array((w, h)) * 3 / 4
     return (coords - base_anchor) / base_size
 
 def inv_parameterize(t, w, h):
+    return t
     base_anchor = np.array(((w,h), (w,7*h), (7*w,7*h), (7*w,h))) / 8
     base_size = np.array((w, h)) * 3 / 4
     return t * base_size + base_anchor
@@ -77,25 +79,23 @@ def inv_parameterize(t, w, h):
 
 class BoardLocalization(Dataset):
     def __init__(self, root, anna_file, transform=None):
-        self.imgs = []
-        self.coords = []
+        self.root = root
+        self.annas = None
+        self.transform = transform
         with open(os.path.join(root, anna_file), 'rb') as fo:
-            annas = pickle.load(fo, encoding='bytes')
-            for anna in annas:
-                self.imgs.append(transform(Image.open(os.path.join(root, anna['file_name']))))
-                self.coords.append(anna['coords'])
-        self.imgs = torch.stack(self.imgs, dim=0)
-        
-        self.coords = np.array(self.coords).reshape((-1,4,2))
-        self.coords = parameterize(self.coords, width, height)
-        self.coords = self.coords.reshape((-1,8))
-        self.coords = torch.from_numpy(self.coords)
+            self.annas = pickle.load(fo, encoding='bytes')
         
     def __getitem__(self, idx):
-        return (self.imgs[idx], self.coords[idx])
+        anna = self.annas[idx]
+        img = self.transform(Image.open(os.path.join(self.root, anna['file_name'])))
+        coords = anna['coords']
+        coords = np.array(coords).reshape((4,2))
+        coords = parameterize(coords, width, height)
+        coords = coords.reshape(8)
+        return img, coords
     
     def __len__(self):
-        return self.imgs.shape[0]
+        return len(self.annas)
 
 
 # %% Create 'Dataset's and 'DataLoader's
@@ -140,7 +140,7 @@ def check_acc(model, loader, total_batches=0):
             y = y.to(device=device, dtype=dtype)
             scores = model(x)
             
-            num_correct += torch.sum(torch.abs(scores - y) <= 0.02)
+            num_correct += torch.sum(torch.abs(scores - y) <= 40)
             num_samples += scores.shape[0] * scores.shape[1]
             
             num_batches += 1
@@ -176,7 +176,7 @@ def predict(image, debug=False):
             corner_pos = []
             
         for i in range(4):
-            s = 10
+            s = 20
             corner = cv.goodFeaturesToTrack(
                 edges[max(positions[i,1]-s, 0) : min(positions[i,1]+s, h),
                       max(positions[i,0]-s, 0) : min(positions[i,0]+s, w)],
@@ -221,7 +221,7 @@ def init():
     for cur, _, files in os.walk('./'):  # check if we have the logdir already
         if cur == './{}'.format(logdir):  # we've found it
             # load basic resnet18
-            model = torchvision.models.alexnet(pretrained=False, num_classes=8)
+            model = torchvision.models.resnet18(pretrained=False, num_classes=8)
             
             # find the latest checkpoint file (.pkl)
             prefix, suffix = 'fine-tune-', '.pkl'
@@ -252,15 +252,15 @@ def init():
     else:  # there's not
         os.mkdir(logdir)
         # load pretrained resnet18
-        model = torchvision.models.alexnet(pretrained=True)
+        model = torchvision.models.resnet18(pretrained=True)
         # change the number of classes
-        children = [child for child in model.classifier.children()][:-1]
-        fc = torch.nn.Linear(4096, 8)
-        children.append(fc)
-        model.classifier = torch.nn.Sequential(*children)
-        nn.init.kaiming_normal_(fc.weight)
-        #model.fc = torch.nn.Linear(model.fc.in_features, 8)
-        #nn.init.kaiming_normal_(model.fc.weight)
+        #children = [child for child in model.classifier.children()][:-1]
+        #fc = torch.nn.Linear(4096, 8)
+        #children.append(fc)
+        #model.classifier = torch.nn.Sequential(*children)
+        #nn.init.kaiming_normal_(fc.weight)
+        model.fc = torch.nn.Linear(model.fc.in_features, 8)
+        nn.init.kaiming_normal_(model.fc.weight)
         
         loss_summary = []
         acc_summary = []
@@ -430,14 +430,14 @@ def weighted_linear_regression(summary, tau):
 # %% Test
     
 def test():
-    src = ['board-images-new/image{}.jpg'.format(i) for i in range(200)]
+    src = ['board-images-new/image{}.jpg'.format(i) for i in range(180, 200)]
     for img in src:
         plt.cla()
         image = cv.imread(img)
         ultility.show(image)
         positions = predict(image)
         plt.scatter(positions[:,0], positions[:,1])
-        plt.pause(0.2)
+        plt.pause(1)
 
 
 # %% Main (train neural net)
