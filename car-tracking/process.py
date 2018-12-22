@@ -137,13 +137,13 @@ def init(debug=False):
     
 def read(debug=False):
     global cap, positions
-    success = -1
+    success = False
     tic = time.time()
     for t in range(frames_per_read):
         success, frame = cap.read(0)
+        if not success: return -1
     toc = time.time()
     print('Read a frame used {:.2f} s'.format(toc-tic))
-    if not success: return -1
     
     if not fix_camera:
         positions = match.match(frame)
