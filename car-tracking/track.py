@@ -37,15 +37,19 @@ class Descriptor:
                    | (np.abs(self.img[...,0:1]-0) < 10)) * self.img
         self.back = self.refine(self.back, 2, 7)
         self.feat = cv.cvtColor(self.front + self.back, cv.COLOR_HSV2BGR)
+        self.front_point = None
+        self.back_point = None
         
         # Get 2 points from the image
         try:
-            self.front_point = self.center_of_blob(self.front)
             self.back_point = self.center_of_blob(self.back)
+            self.front_point = self.center_of_blob(self.front)
             self.success = True
         except:
             self.success = False
-            return None
+        
+        if self.back_point is None or self.front_point is None:
+            return self.back_point, None
         
         # Apply a correction of rotation
         dist = np.linalg.norm(self.back_point-self.front_point)
@@ -76,6 +80,7 @@ class Descriptor:
             cv.cvtColor(cv.cvtColor(img, cv.COLOR_HSV2BGR), cv.COLOR_BGR2GRAY),
             1, 255, cv.THRESH_BINARY
         )
+        #ultility.show(img)
         M = cv.moments(img)
         x = int(M['m10'] / M['m00'])
         y = int(M['m01'] / M['m00'])
@@ -98,16 +103,16 @@ def track(img, debug=False):
 
 def init():
     global detector
-    detector = Descriptor(0.15)
+    detector = Descriptor(0)
     
 
 # %% Main: a test program
 
 def main():
-    #cap = cv.VideoCapture('VID_4.mp4')
-    address = 'http://admin:9092@10.64.15.42:8081/video'
+    cap = cv.VideoCapture('VID_4.mp4')
+    #address = 'http://admin:9092@10.64.15.42:8081/video'
     while True:
-        cap = cv.VideoCapture(address)
+        #cap = cv.VideoCapture(address)
         success, frame = cap.read(0)
         if not success:
             break

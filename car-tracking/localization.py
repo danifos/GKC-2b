@@ -43,7 +43,8 @@ import ultility
 # %% Basic settings
 
 # changed
-logdir = 'model'
+#logdir = 'model'
+logdir = 'car-tracking/model'
 batch_size = 32
 learning_rate = 1e-4
 weight_decay = 5e-4
@@ -209,7 +210,7 @@ def predict(image, debug=False):
 
 # %% Initializing with pretrained ResNet-18
 
-def init():
+def init(predict=True):
     """Initialize the model, epoch and step, loss and acc summary."""
     
     global model, epoch, step
@@ -241,15 +242,19 @@ def init():
             else:
                 print('***ERROR*** No .pkl file was found!')
             
-            # open the summary file
-            with open('{}/summary'.format(logdir), 'rb') as fo:
-                dic = pickle.load(fo, encoding='bytes')
-                loss_summary = dic['loss']
-                acc_summary = dic['acc']
-            
+            if not predict:
+                # open the summary file
+                with open('{}/summary'.format(logdir), 'rb') as fo:
+                    dic = pickle.load(fo, encoding='bytes')
+                    loss_summary = dic['loss']
+                    acc_summary = dic['acc']
+                
             break
         
     else:  # there's not
+        if predict:
+            print('***ERROR*** {}/ not found!'.format(logdir))
+            return
         os.mkdir(logdir)
         # load pretrained resnet18
         model = torchvision.models.resnet18(pretrained=True)

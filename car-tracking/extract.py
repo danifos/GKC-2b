@@ -28,13 +28,17 @@ for t in meta:
 templates = np.stack(templates, axis=2)
 
 # s: When applying dialation, the size is (s*2+1, s*2+1), the kernel is (s, s).
-s = 2
+s = 3
 
 # distance that 2 lines closed enough to be recognized as a single one
 delta_e = 10
 
 # distance that 2 endpoints closed enough to be regonized as an intersection
 delta_v = 30
+
+margin = 1
+use_adaptive_threshold = False
+end_refine = float('inf')
 
 
 # %% Ultility functions
@@ -252,19 +256,36 @@ def extract(frame, debug=False):
     
     # put the image from BGR to gray
     edges = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    # ignore a boundary
+    color = 0 if use_adaptive_threshold else 255
+    edges[:margin,:] = color
+    edges[-margin:,:] = color
+    edges[:,:margin] = color
+    edges[:,-margin:] = color
     # transform into binary image
-    threshold = k_means_clustering(edges)['threshold']
-    _, edges = cv.threshold(edges, threshold, 255, cv.THRESH_BINARY)
+    if use_adaptive_threshold:
+        edges = cv.medianBlur(edges, 11)
+        edges = cv.adaptiveThreshold(edges, 255, cv.ADAPTIVE_THRESH_MEAN_C,
+                                     cv.THRESH_BINARY, 41, 4)
+    else:
+        threshold = k_means_clustering(edges)['threshold']
+        _, edges = cv.threshold(edges, threshold, 255, cv.THRESH_BINARY)
     
     # make the image thinner a little bit
     edges = cv.dilate(edges, cv.getStructuringElement(cv.MORPH_CROSS, (s*2+1,)*2, (s,)*2))
     
     # make the image as thin as possible (until refine(edges) returns 0)
-    #while refine(edges): pass
+    #while refine(edges) > end_refine: pass
 
     # detect lines roughly with Hough transformation
     lines = cv.HoughLinesP(255-edges, 1, np.pi/360, 20, None, 30, 20)
     lines = [l[0] for l in lines]
+    
+    # show the binarization and Hough transform result for a while
+    ultility.show(edges)
+    for line in lines:
+        plt.plot(line[::2], line[1::2])
+    plt.pause(1)
     
     if debug:
         print('image refined | lines detected | lines rearranged')
@@ -281,5 +302,18 @@ def extract(frame, debug=False):
         plt.show()
             
     vertices = nodes(lines)
+    
+    # add the middle point of each segments
+    new = []
+    for i in range(len(vertices)-1):
+        new.append(vertices[i])
+        new.append(((vertices[i][0]+vertices[i+1][0])/2,
+                    (vertices[i][1]+vertices[i+1][1])/2))
+    new.append(vertices[-1])
+    vertices = new
+    
+    # ensure that the start point is in the left
+    if vertices[0][0] > vertices[-1][0]:
+        vertices.reverse()
     
     return vertices

@@ -42,7 +42,7 @@ class MeanShiftTracker:
     
     
 class CornerTracker:
-    def __init__(self, pos, r=10):
+    def __init__(self, pos, r=20):
         """
         Inputs:
             - pos: Point to track

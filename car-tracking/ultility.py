@@ -15,10 +15,13 @@ import cv2 as cv
 
 def show(*imgs):
     images = []
-    height = min(image.shape[0] for image in imgs)
-    for i, image in enumerate(imgs):
-        width = int(image.shape[1]/image.shape[0]*height)
-        images.append(cv.resize(image, (width, height)))
+    if len(imgs) > 1:
+        height = min(image.shape[0] for image in imgs)
+        for i, image in enumerate(imgs):
+            width = int(image.shape[1]/image.shape[0]*height)
+            images.append(cv.resize(image, (width, height)))
+    else:
+        images.append(imgs[0])
             
     arrays = [image[:,:,::-1] if len(image.shape) == 3 \
               else np.stack((image,)*3, axis=2) for image in images]

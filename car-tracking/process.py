@@ -26,12 +26,13 @@ import match
 # about image collection
 username = 'admin'
 password = 'admin'
-lan = '10.162.76.208:8081'
+lan = '10.134.20.153:8081'
 address = None
 load_from_video = False
-manual_transform = True
+manual_transform = False
 fix_camera = False
 interval = 0.03
+frames_per_read = 5
 
 # sizes after transformation
 width = 297
@@ -43,7 +44,7 @@ size = np.array((width, height))
 positions = None
 perspective = np.array(((0,0), (0,height), (width,height), (width,0)),
                        dtype=np.float32)
-shift = 0  # show a larger perspective than the board
+shift = 50  # show a larger perspective than the board
 
 def warp_perspective(image, position, perspective, size):
     image = cv.warpPerspective(
@@ -58,7 +59,7 @@ cap = None
 # %% Functions for initialization
 
 def init(debug=False):
-    global lan, address, positions, cap
+    global lan, address, positions, cap, vertices
     
     track.init()
     if not manual_transform:
@@ -68,11 +69,11 @@ def init(debug=False):
         cap = cv.VideoCapture('demo_large.mp4')
         #image = cv.imread('./board-images-new/image199.jpg')
     else:
-        string = input('Please check if the LAN address ({}) is correct \
-                       (press ENTER to confirm or type a new address):'\
-                       .format(lan))
-        if string != '':
-            lan = string
+#        string = input('Please check if the LAN address ({}) is correct \
+#                       (press ENTER to confirm or type a new address):'\
+#                       .format(lan))
+#        if string != '':
+#            lan = string
         address = 'http://{}:{}@{}/video'.format(username, password, lan)
         
         cap = cv.VideoCapture(address)
@@ -116,6 +117,8 @@ def init(debug=False):
     ultility.show(img)
     
     vertices = extract.extract(img, debug=debug)
+    vertices = np.array(vertices)+shift
+    print(vertices)
     
     if debug:
         print('path:', vertices)
@@ -124,6 +127,8 @@ def init(debug=False):
         plt.show()
     
     match.init(image, positions)
+    if not load_from_video:
+        cap = cv.VideoCapture(address)
     
     return vertices
 
@@ -132,9 +137,12 @@ def init(debug=False):
     
 def read(debug=False):
     global cap, positions
-    if not load_from_video:
-        cap = cv.VideoCapture(address)
-    success, frame = cap.read(0)
+    success = -1
+    tic = time.time()
+    for t in range(frames_per_read):
+        success, frame = cap.read(0)
+    toc = time.time()
+    print('Read a frame used {:.2f} s'.format(toc-tic))
     if not success: return -1
     
     if not fix_camera:
@@ -145,6 +153,8 @@ def read(debug=False):
     coords = track.track(img, debug=debug)
     if not debug:  # show the origin image if not in debug mode
         ultility.show(img, frame)
+    ultility.plot(vertices)
+    plt.pause(interval)
     
     return coords
 
@@ -157,13 +167,12 @@ def main():
     manual_transform = False
     fix_camera = False
     
-    path = init(debug=False)
+    init(debug=False)
     while True:
         plt.cla()
         ret = read(debug=True)
         if ret == -1:
             break
-        ultility.plot(np.array(path)+shift)
         plt.pause(interval)
 
 
